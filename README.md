@@ -42,7 +42,7 @@ The current implementation is configured with data from Anna Sewell's "Black Bea
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/your-username/book-summarization-chatbot.git
+   git clone https://github.com/himanij11/book-summarization-chatbot.git
    cd book-summarization-chatbot
    ```
 
