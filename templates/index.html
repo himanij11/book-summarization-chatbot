@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chatbot</title>
+    
+    <!-- Bootstrap and FontAwesome -->
+    <link
+      rel="stylesheet"
+      href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"
+      integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="stylesheet"
+      href="https://use.fontawesome.com/releases/v5.5.0/css/all.css"
+      integrity="sha384-B4dIYHKNBt8Bc12p+WXckhzcICo0wtJAoU8YZTY5qE0Id1GSseTk6S+L3BlXeVIU"
+      crossorigin="anonymous"
+    />
+
+    <!-- jQuery and Bootstrap Scripts -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="//maxcdn.bootstrapcdn.com/bootstrap/4.1.1/js/bootstrap.min.js"></script>
+
+    <!-- Custom CSS -->
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="{{ url_for('static', filename='style.css')}}"
+    />
+  </head>
+
+  <body>
+    <div class="container-fluid h-100">
+      <div class="row justify-content-center h-100">
+        <div class="col-md-8 col-xl-6 chat">
+          <div class="card">
+            <div class="card-header msg_head">
+              <div class="d-flex bd-highlight">
+                <div class="user_info">
+                  <span>ChatBot</span>
+                  <p>Ask me anything!</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chat Messages Section -->
+            <div id="chatbox" class="card-body msg_card_body"></div>
+
+            <!-- Chat Input Section -->
+            <div class="card-footer">
+              <form id="messageArea" class="input-group">
+                <input
+                  type="text"
+                  id="text"
+                  name="msg"
+                  placeholder="Type your message..."
+                  autocomplete="off"
+                  class="form-control type_msg"
+                  required
+                />
+                <div class="input-group-append">
+                  <button
+                    type="submit"
+                    id="send"
+                    class="input-group-text send_btn"
+                  >
+                    <i class="fas fa-location-arrow"></i>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- JavaScript for Chat Handling -->
+    <script>
+      $(document).ready(function () {
+        $("#messageArea").submit(function (event) {
+          event.preventDefault(); // Prevent default form submission
+
+          var rawText = $("#text").val().trim(); // Get input text and remove extra spaces
+          if (rawText === "") return; // Ignore empty messages
+
+          // Append user message to chatbox
+          var userHtml = '<p class="userText"><span>' + rawText + "</span></p>";
+          $("#chatbox").append(userHtml);
+          $("#text").val(""); // Clear input field
+
+          // Scroll to the latest message
+          document.getElementById("chatbox").scrollIntoView({ block: "end", behavior: "smooth" });
+
+          // Send message to the backend
+          $.get("/get", { msg: rawText }).done(function (data) {
+            // Append bot response to chatbox
+            var botHtml = '<p class="botText"><span>' + data + "</span></p>";
+            $("#chatbox").append(botHtml);
+
+            // Scroll to the latest message
+            document.getElementById("chatbox").scrollIntoView({ block: "end", behavior: "smooth" });
+          });
+        });
+      });
+    </script>
+  </body>
+</html>
