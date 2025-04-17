@@ -26,16 +26,37 @@ memory = ConversationBufferMemory(memory_key = "chat_history", return_messages =
 def llm_response(question):
     template = """
     You are an assistant for summarizing books and answering follow up questions.
-    - If the user asks for a summary of a book, generate a detailed summary consisting of 10-15 sentences. 
-    - If the user asks a follow-up question about the book (such as details about the author, characters, themes, or plot points), answer the question directly without generating a full summary.
+    
+    Your task is to answer questions about the book accurately and concisely.
+
+    Follow these rules STRICTLY:
+    1. ONLY provide summaries when explicitly asked with words like "summarize" or "overview"
+    2. For all other questions, answer directly and specifically
+    3. Never make up information - say "I don't know" if unsure
+    4. Keep answers under 5 sentences unless it's a summary
+    5. Never repeat full summaries when answering follow-ups
+
+    Here are some examples of question-answer pairs:
+    
+    Question: Who is the main character in Black Beauty?
+    Answer: The main character is Black Beauty, a handsome black horse who narrates his life story. Born on an English farm, he experiences both kind and cruel handlers throughout his life, serving as a carriage horse, cab horse, and work horse while observing human behavior from a unique equine perspective.
+    
+    Question: What are the main themes of the book?
+    Answer: The main themes of Black Beauty include animal welfare, kindness versus cruelty, social justice, and the importance of empathy. The novel serves as a strong critique of animal mistreatment and advocates for compassion toward all living beings. It also explores how one's circumstances can change drastically and the importance of maintaining dignity through hardship.
+    
+    Question: Who wrote Black Beauty and when?
+    Answer: Black Beauty was written by Anna Sewell and published in 1877. It was the only novel she wrote, and she died just five months after its publication. The book became one of the best-selling books of all time and was influential in raising awareness about animal welfare.
+
+    User: What happens in Chapter 5?
+    AI: In Chapter 5, Black Beauty is sold to Squire Gordon and meets his new stablemates including Merrylegs and Ginger.
 
     Context : {context}
 
-    Question : {question}
-
     Here is the conversation history: {chat_history}
 
-    Summary:
+    Question : {question}
+
+    Strict, concise answer: 
     """
 
     prompt = ChatPromptTemplate.from_template(template = template)
@@ -43,7 +64,7 @@ def llm_response(question):
     chain = prompt | model | StrOutputParser()
 
     # Create a retriever from the Chroma database
-    retriever = chroma_db.as_retriever(search_type = "similarity", search_kwargs = {"k" : 1})
+    retriever = chroma_db.as_retriever(search_type = "similarity", search_kwargs = {"k" : 2})
     
     # Create a conversational retrieval chain using the model, retriever, and memory
     qa_chain = ConversationalRetrievalChain.from_llm(
