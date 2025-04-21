@@ -7,6 +7,9 @@ from langchain_ollama import ChatOllama
 from langchain.schema import StrOutputParser
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
+from langchain.tools import tool
+from langchain.agents import AgentExecutor, create_react_agent
+import re
 
 # Initialize Flask application
 app = Flask(__name__)
@@ -22,15 +25,55 @@ chroma_db = Chroma(persist_directory = './book_data/anna-sewell_black-beauty',
 # Using ConversationBufferMemory to store and retrieve conversation history
 memory = ConversationBufferMemory(memory_key = "chat_history", return_messages = True)
 
+model = ChatOllama(model = 'llama3.2')
+
+# Define custom translation tool using @tool decorator
+@tool
+def translate_text(input: str) -> str:
+    """
+    Translates text into the specified target language.
+
+    Format: "Translate to <language>: <text>"
+
+    Example: "Translate to French: the book was written by Anna"
+    """
+    match = re.search(r'translate(?: to)?\s+([a-zA-Z]+)\s*:\s*(.+)', input, re.IGNORECASE)
+    if not match:
+        return "Invalid format. Use: 'Translate to <language>: <text>'"
+
+    target_language = match.group(1).capitalize()
+    input_text = match.group(2).strip()
+
+    supported_languages = ["French", "Hindi", "Spanish", "German", "Chinese", 
+                           "Japanese", "Italian", "Korean", "Russian"]
+
+    if target_language not in supported_languages:
+        return f"Unsupported language '{target_language}'. Supported: {', '.join(supported_languages)}"
+
+    translation_template = """
+    You are a professional translator. Translate the following text into {target_language}.
+    Maintain the same tone, style, and meaning as the original text.
+
+    Text to translate:
+    {input_text}
+
+    Translation:
+    """
+
+    prompt = ChatPromptTemplate.from_template(template=translation_template)
+    chain = prompt | model | StrOutputParser()
+    return chain.invoke({"input_text": input_text, "target_language": target_language})
+
 # Function to generate a response from the LLM based on the user's question
-def llm_response(question):
-    template = """
+def llm_response(question : str) -> str:
+    
+    chat_template = """
     You are an assistant for summarizing books and answering follow up questions.
     
     Your task is to answer questions about the book accurately and concisely.
 
     Follow these rules STRICTLY:
-    1. ONLY provide summaries when explicitly asked with words like "summarize" or "overview"
+    1. ONLY provide summaries when explicitly asked with words like "summarize" or "overview" or "summary"
     2. For all other questions, answer directly and specifically
     3. Never make up information - say "I don't know" if unsure
     4. Keep answers under 5 sentences unless it's a summary
@@ -59,9 +102,8 @@ def llm_response(question):
     Strict, concise answer: 
     """
 
-    prompt = ChatPromptTemplate.from_template(template = template)
-    model = ChatOllama(model = 'llama3.2')
-    chain = prompt | model | StrOutputParser()
+    chat_prompt = ChatPromptTemplate.from_template(template = chat_template)
+    chain = chat_prompt | model | StrOutputParser()
 
     # Create a retriever from the Chroma database
     retriever = chroma_db.as_retriever(search_type = "similarity", search_kwargs = {"k" : 2})
@@ -71,25 +113,70 @@ def llm_response(question):
         llm = model, 
         retriever = retriever, 
         memory = memory, 
-        combine_docs_chain_kwargs = {"prompt": prompt}
+        combine_docs_chain_kwargs = {"prompt": chat_prompt}
     )
 
-    context = qa_chain.invoke(question)
+    result = qa_chain.invoke(question)
     
-    return context['answer']
+    return result['answer']
 
-# Define the route for the home page
+# Define agent prompt template
+agent_template = """
+You are a helpful AI assistant for answering questions about books and translating content.
+
+TOOLS:
+{tools}
+
+You can use tools like this:
+Question: the user input
+Thought: Do I need a tool? Yes/No
+Action: one of [{tool_names}]
+Action Input: the input string
+Observation: the result
+...
+Thought: I now know the final answer
+Final Answer: <your answer>
+
+Question: {input}
+{agent_scratchpad}
+"""
+
+# Setup tools
+tools = [translate_text]
+tool_names = [tool.name for tool in tools]
+
+# Final prompt
+agent_prompt = ChatPromptTemplate.from_template(template=agent_template).partial(
+    tool_names=", ".join(tool_names),
+    tools="\n".join(f"{tool.name}: {tool.description}" for tool in tools)
+)
+
+# Create agent and executor
+agent = create_react_agent(llm=model, tools=tools, prompt=agent_prompt)
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
+
+# Define the route for home page
 @app.route('/')
 def home():
     return render_template('index.html')
 
-# Define the route for handling chatbot responses
 @app.route('/get', methods=["GET", "POST"])
 def chatbot_response():
     userText = request.args.get('msg') if request.method == "GET" else request.form.get('msg')
-    response = llm_response(userText)
+
+    if any(word in userText.lower() for word in ["summarize", "overview", "summary"]):
+        response = llm_response(userText)
+    elif "translate" in userText.lower():
+        try:
+            result = agent_executor.invoke({"input": userText})
+            response = result.get('output', result)  # Get 'output' key if returned as a dict
+        except Exception as e:
+            response = f"Translation failed: {str(e)}"
+    else:
+        response = llm_response(userText)
+
     return str(response)
 
-# Run the Flask application
+# Run the app
 if __name__ == '__main__':
     app.run(debug=False)
